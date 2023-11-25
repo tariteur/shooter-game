@@ -9,31 +9,32 @@ const io = socketIO(server);
 
 const port = 3000;
 
-// Servez les fichiers statiques
+// Serve static files
 app.use(express.static(path.join(__dirname)));
 
-// Route pour l'index.html
+// Route for index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Gestion de la connexion d'un client
+// Handling client connection
 io.on('connection', (socket) => {
   console.log('Client connected');
 
-  // Gestion de la réception des positions du joueur
+  // Handling reception of player positions
   socket.on('playerPosition', (position) => {
-    // Diffuser la position à tous les autres clients
+    // Broadcast the position to all other clients
     socket.broadcast.emit('updatePlayerPosition', { playerId: socket.id, position });
   });
 
-  // Gestion de la déconnexion d'un client
+  // Handling client disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    // Vous pouvez ajouter ici une logique pour gérer la déconnexion d'un joueur
+    // You can add logic here to handle a player's disconnection
   });
 });
 
+// Server listening on a specified port
 server.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
