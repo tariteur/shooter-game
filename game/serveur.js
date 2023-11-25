@@ -7,6 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// server port
 const port = 3000;
 
 // Servez les fichiers statiques
