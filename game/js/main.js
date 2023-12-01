@@ -2,21 +2,21 @@ import * as THREE from 'three';
 
 import Stats from 'three/addons/libs/stats.module.js';
 
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { Octree } from 'three/addons/math/Octree.js';
+import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
 
 import { Capsule } from 'three/addons/math/Capsule.js';
 
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { controls } from './controls';
-import { teleportPlayerIfOob } from './teleportPlayerIfOob';
-import { updateSpheres } from './updateSpheres';
-import { updatePlayer } from './updatePlayer';
 
-export const socket = io('http://localhost:3000');
+const socket = io('http://localhost:3000');
 
 const clock = new THREE.Clock();
 
-export const scene = new THREE.Scene();
+const scene = new THREE.Scene();
 scene.background = new THREE.Color( 0x88ccee );
 scene.fog = new THREE.Fog( 0x88ccee, 0, 50 );
 
@@ -57,7 +57,7 @@ stats.domElement.style.position = 'absolute';
 stats.domElement.style.top = '0px';
 container.appendChild( stats.domElement );
 
-export const GRAVITY = 30;
+const GRAVITY = 30;
 
 const NUM_SPHERES = 100;
 const SPHERE_RADIUS = 0.01;
@@ -67,7 +67,7 @@ const STEPS_PER_FRAME = 5;
 const sphereGeometry = new THREE.IcosahedronGeometry( SPHERE_RADIUS, 5 );
 const sphereMaterial = new THREE.MeshLambertMaterial( { color: 0xdede8d } );
 
-export const spheres = [];
+const spheres = [];
 let sphereIdx = 0;
 
 for ( let i = 0; i < NUM_SPHERES; i ++ ) {
@@ -86,9 +86,9 @@ for ( let i = 0; i < NUM_SPHERES; i ++ ) {
 
 }
 
-export const worldOctree = new Octree();
+const worldOctree = new Octree();
 
-export const playerCollider = new Capsule( new THREE.Vector3( 0, 0.35, 0 ), new THREE.Vector3( 0, 1, 0 ), 0.35 );
+const playerCollider = new Capsule( new THREE.Vector3( 0, 0.35, 0 ), new THREE.Vector3( 0, 1, 0 ), 0.35 );
 
 export const playerVelocity = new THREE.Vector3();
 export const playerDirection = new THREE.Vector3();
@@ -98,9 +98,9 @@ let mouseTime = 0;
 
 export const keyStates = {};
 
-export const vector1 = new THREE.Vector3();
-export const vector2 = new THREE.Vector3();
-export const vector3 = new THREE.Vector3();
+const vector1 = new THREE.Vector3();
+const vector2 = new THREE.Vector3();
+const vector3 = new THREE.Vector3();
 
 document.addEventListener( 'keydown', ( event ) => {
 
@@ -169,11 +169,220 @@ function throwBall() {
 
 }
 
+function playerCollisions() {
+
+	const result = worldOctree.capsuleIntersect( playerCollider );
+
+	playerOnFloor = false;
+
+	if ( result ) {
+
+		playerOnFloor = result.normal.y > 0;
+
+		if ( ! playerOnFloor ) {
+
+playerVelocity.addScaledVector( result.normal, - result.normal.dot( playerVelocity ) );
+
+		}
+
+		playerCollider.translate( result.normal.multiplyScalar( result.depth ) );
+
+	}
+
+}
+function updatePlayer( deltaTime ) {
+
+	let damping = Math.exp( - 4 * deltaTime ) - 1;
+
+	if ( ! playerOnFloor ) {
+
+		playerVelocity.y -= GRAVITY * deltaTime;
+
+		// small air resistance
+		damping *= 0.1;
+
+	}
+
+	playerVelocity.addScaledVector( playerVelocity, damping );
+
+	const deltaPosition = playerVelocity.clone().multiplyScalar( deltaTime );
+	playerCollider.translate( deltaPosition );
+
+	playerCollisions();
+
+	camera.position.copy( playerCollider.end );
+
+	socket.emit('playerPosition', playerCollider.end.toArray());
+}
+
+function playerSphereCollision( sphere ) {
+
+	const center = vector1.addVectors( playerCollider.start, playerCollider.end ).multiplyScalar( 0.5 );
+
+	const sphere_center = sphere.collider.center;
+
+	const r = playerCollider.radius + sphere.collider.radius;
+	const r2 = r * r;
+
+	// approximation: player = 3 spheres
+
+	for ( const point of [ playerCollider.start, playerCollider.end, center ] ) {
+
+		const d2 = point.distanceToSquared( sphere_center );
+
+		if ( d2 < r2 ) {
+
+const normal = vector1.subVectors( point, sphere_center ).normalize();
+const v1 = vector2.copy( normal ).multiplyScalar( normal.dot( playerVelocity ) );
+const v2 = vector3.copy( normal ).multiplyScalar( normal.dot( sphere.velocity ) );
+
+playerVelocity.add( v2 ).sub( v1 );
+sphere.velocity.add( v1 ).sub( v2 );
+
+const d = ( r - Math.sqrt( d2 ) ) / 2;
+sphere_center.addScaledVector( normal, - d );
+
+		}
+
+	}
+
+}
+
+function spheresCollisions() {
+
+	for ( let i = 0, length = spheres.length; i < length; i ++ ) {
+
+		const s1 = spheres[ i ];
+
+		for ( let j = i + 1; j < length; j ++ ) {
+
+const s2 = spheres[ j ];
+
+const d2 = s1.collider.center.distanceToSquared( s2.collider.center );
+const r = s1.collider.radius + s2.collider.radius;
+const r2 = r * r;
+
+if ( d2 < r2 ) {
+
+	const normal = vector1.subVectors( s1.collider.center, s2.collider.center ).normalize();
+	const v1 = vector2.copy( normal ).multiplyScalar( normal.dot( s1.velocity ) );
+	const v2 = vector3.copy( normal ).multiplyScalar( normal.dot( s2.velocity ) );
+
+	s1.velocity.add( v2 ).sub( v1 );
+	s2.velocity.add( v1 ).sub( v2 );
+
+	const d = ( r - Math.sqrt( d2 ) ) / 2;
+
+	s1.collider.center.addScaledVector( normal, d );
+	s2.collider.center.addScaledVector( normal, - d );
+
+}
+
+		}
+
+	}
+
+}
+
+function updateSpheres( deltaTime ) {
+
+	spheres.forEach( sphere => {
+
+		sphere.collider.center.addScaledVector( sphere.velocity, deltaTime );
+
+		const result = worldOctree.sphereIntersect( sphere.collider );
+
+		if ( result ) {
+
+sphere.velocity.addScaledVector( result.normal, - result.normal.dot( sphere.velocity ) * 1.5 );
+sphere.collider.center.add( result.normal.multiplyScalar( result.depth ) );
+
+		} else {
+
+sphere.velocity.y -= GRAVITY * deltaTime;
+
+		}
+
+		const damping = Math.exp( - 1.5 * deltaTime ) - 1;
+		sphere.velocity.addScaledVector( sphere.velocity, damping );
+
+		playerSphereCollision( sphere );
+
+	} );
+
+	spheresCollisions();
+
+	for ( const sphere of spheres ) {
+
+		sphere.mesh.position.copy( sphere.collider.center );
+
+	}
+
+}
+
 socket.on('updatePlayerPosition', ({ playerId, position }) => {
   console.log(`Player ${playerId} position update: ${position}`);
 });
 
-export function animate() {
+const loader = new GLTFLoader().setPath( './models/glb/' );
+
+loader.load( 'map.glb', ( gltf ) => {
+
+	gltf.scene.scale.set(2, 2, 2);
+
+	scene.add( gltf.scene ); 
+
+	worldOctree.fromGraphNode( gltf.scene );
+
+	gltf.scene.traverse( child => {
+
+		if ( child.isMesh ) {
+
+child.castShadow = true;
+child.receiveShadow = true;
+
+if ( child.material.map ) {
+
+	child.material.map.anisotropy = 4;
+
+}
+
+		}
+
+	} );
+
+	const helper = new OctreeHelper( worldOctree );
+	helper.visible = false;
+	scene.add( helper );
+
+	const gui = new GUI( { width: 200 } );
+	gui.add( { debug: false }, 'debug' )
+		.onChange( function ( value ) {
+
+helper.visible = value;
+
+		} );
+
+	animate();
+
+} );
+
+function teleportPlayerIfOob() {
+
+	if ( camera.position.y <= - 25 ) {
+
+		playerCollider.start.set( 0, 0.35, 0 );
+		playerCollider.end.set( 0, 1, 0 );
+		playerCollider.radius = 0.35;
+		camera.position.copy( playerCollider.end );
+		camera.rotation.set( 0, 0, 0 );
+
+	}
+
+}
+
+
+function animate() {
 
 	const deltaTime = Math.min( 0.05, clock.getDelta() ) / STEPS_PER_FRAME;
 
