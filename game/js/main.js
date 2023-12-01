@@ -12,6 +12,8 @@ import { Capsule } from 'three/addons/math/Capsule.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { controls } from './controls';
 
+import * as io from 'io';
+
 const socket = io('http://localhost:3000');
 
 const clock = new THREE.Clock();
