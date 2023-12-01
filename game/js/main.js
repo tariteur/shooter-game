@@ -2,24 +2,21 @@ import * as THREE from 'three';
 
 import Stats from 'three/addons/libs/stats.module.js';
 
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { Octree } from 'three/addons/math/Octree.js';
-import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
 
 import { Capsule } from 'three/addons/math/Capsule.js';
 
-import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { controls } from './controls';
-
-import { updatePlayer, updateSpheres } from './updatePlayer';
 import { teleportPlayerIfOob } from './teleportPlayerIfOob';
+import { updateSpheres } from './updateSpheres';
+import { updatePlayer } from './updatePlayer';
 
-const socket = io('http://localhost:3000');
+export const socket = io('http://localhost:3000');
 
 const clock = new THREE.Clock();
 
-const scene = new THREE.Scene();
+export const scene = new THREE.Scene();
 scene.background = new THREE.Color( 0x88ccee );
 scene.fog = new THREE.Fog( 0x88ccee, 0, 50 );
 
@@ -176,50 +173,7 @@ socket.on('updatePlayerPosition', ({ playerId, position }) => {
   console.log(`Player ${playerId} position update: ${position}`);
 });
 
-const loader = new GLTFLoader().setPath( './models/glb/' );
-
-loader.load( 'map.glb', ( gltf ) => {
-
-	gltf.scene.scale.set(2, 2, 2);
-
-	scene.add( gltf.scene ); 
-
-	worldOctree.fromGraphNode( gltf.scene );
-
-	gltf.scene.traverse( child => {
-
-		if ( child.isMesh ) {
-
-child.castShadow = true;
-child.receiveShadow = true;
-
-if ( child.material.map ) {
-
-	child.material.map.anisotropy = 4;
-
-}
-
-		}
-
-	} );
-
-	const helper = new OctreeHelper( worldOctree );
-	helper.visible = false;
-	scene.add( helper );
-
-	const gui = new GUI( { width: 200 } );
-	gui.add( { debug: false }, 'debug' )
-		.onChange( function ( value ) {
-
-helper.visible = value;
-
-		} );
-
-	animate();
-
-} );
-
-function animate() {
+export function animate() {
 
 	const deltaTime = Math.min( 0.05, clock.getDelta() ) / STEPS_PER_FRAME;
 
