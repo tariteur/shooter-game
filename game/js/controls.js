@@ -1,4 +1,4 @@
-import { camera, playerDirection, playerOnFloor, keyStates, playerVelocity } from './main';
+import { camera, playerDirection, playerOnFloor, keyStates, playerVelocity } from './main.js';
 
 function getForwardVector() {
 

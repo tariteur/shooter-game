@@ -10,7 +10,7 @@ import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
 import { Capsule } from 'three/addons/math/Capsule.js';
 
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-import { controls } from './controls';
+import { controls } from './controls.js';
 
 const socket = io('http://localhost:3000');
 
